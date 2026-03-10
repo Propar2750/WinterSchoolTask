@@ -17,9 +17,12 @@ import numpy as np
 import os
 from skimage.morphology import skeletonize
 
+# Ensure paths resolve relative to this script, not the caller's cwd
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # ======================== CONFIGURATION ========================
-MAP_PATH = "map_cropped.jpg"
-OUTPUT_DIR = "output"
+MAP_PATH = os.path.join(_SCRIPT_DIR, "map_cropped.jpg")
+OUTPUT_DIR = os.path.join(_SCRIPT_DIR, "output")
 
 # HSV thresholds for detecting blue-ish road lines
 HSV_LOWER = (80, 10, 50)
