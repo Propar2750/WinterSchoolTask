@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.pyc
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# RRT demo cache
+task1/rrt_demo/cache/
+
+# Video outputs (too large for git)
+*.mp4
