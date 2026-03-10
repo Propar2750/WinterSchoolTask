@@ -96,6 +96,10 @@ Final Result
 | `output/result.png` | Final composite with replaced background |
 | `output/comparison.png` | Side-by-side: original → clusters → new background → result |
 
+**Results:**
+
+![Comparison](output/comparison.png)
+
 ---
 
 ## How to Run

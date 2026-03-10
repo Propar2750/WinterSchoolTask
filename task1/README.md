@@ -109,6 +109,14 @@ Converts a campus map image into a clean 1px-wide skeleton road mask:
 
 Each stage saves its output image for inspection. A `pipeline_comparison.png` shows all stages side by side.
 
+**Pipeline Stages:**
+
+![Pipeline Comparison](processing_demo/output/pipeline_comparison.png)
+
+**Final RRT* Result (Processing Demo):**
+
+![RRT* Result — Processing Demo](processing_demo/output/rrt_star_result.jpg)
+
 **Configuration** (top of `preprocess.py`):
 
 | Parameter | Default | Purpose |
@@ -122,6 +130,18 @@ Each stage saves its output image for inspection. A `pipeline_comparison.png` sh
 ### 2. OSM Map Generator (`rrt_demo/osm_map.py`)
 
 Downloads the IIT KGP road network from OpenStreetMap via `osmnx.graph_from_point()`, renders an 800×800 visual map, then creates a skeleton mask by thresholding + skeletonizing the rendered image.
+
+**OSM Visual Map:**
+
+![OSM Visual Map](rrt_demo/output/osm_visual_map.png)
+
+**OSM Road Mask (Skeleton):**
+
+![OSM Road Mask](rrt_demo/output/osm_road_mask.png)
+
+**Final RRT* Result (RRT Demo):**
+
+![RRT* Result — RRT Demo](rrt_demo/output/rrt_star_result.jpg)
 
 | Parameter | Default | Purpose |
 |-----------|---------|---------|
