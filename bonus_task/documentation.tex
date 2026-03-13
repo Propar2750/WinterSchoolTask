@@ -1,0 +1,259 @@
+\documentclass[conference]{IEEEtran}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{algorithm}
+
+\begin{document}
+
+\title{Gesture Controlled Tetris}
+\author{\IEEEauthorblockN{Parv Chopra}}
+\maketitle
+
+\begin{abstract}
+This paper presents a gesture-controlled Tetris game that combines classical game mechanics with real-time hand gesture recognition using MediaPipe's Hand Landmarker model and OpenCV. The system captures webcam frames, detects 21 hand landmarks per frame, and classifies gestures---pinch (thumb-index for left movement, thumb-middle for right movement), thumbs-up (rotation), and closed fist (hard drop)---to control gameplay without any physical input device. A cooldown and hysteresis mechanism prevents accidental repeated triggers, enabling smooth and reliable gesture interaction. The implementation demonstrates practical applications of computer vision in human-computer interaction, accessible gaming interfaces, and touchless control systems for environments where physical contact is undesirable.
+\end{abstract}
+
+\section{Introduction}
+
+Traditional video games rely on physical input devices such as keyboards, mice, and controllers. With advances in real-time hand tracking and pose estimation, gesture-based interaction has emerged as a viable alternative that enables more natural and accessible control paradigms. This project implements a fully playable Tetris game rendered entirely with OpenCV, controllable via both keyboard input and real-time hand gestures detected through a webcam.
+
+The core challenge lies in reliably mapping continuous hand pose data to discrete game actions (move left, move right, rotate, hard drop) with minimal latency and without false triggers. Several approaches were explored, including finger-counting heuristics and directional swipe detection, before settling on a pinch-based gesture vocabulary combined with cooldown timers and hysteresis-based state management.
+
+The system is implemented as a single Python script comprising four components: a Tetris game engine, an OpenCV-based renderer, a MediaPipe-powered gesture controller, and a main loop that integrates all components at approximately 30 frames per second.
+
+\section{Problem Statement}
+
+The objective is to build a real-time gesture-controlled Tetris game that satisfies two requirements: (1) a correct and complete Tetris implementation with standard mechanics (piece spawning, gravity, collision detection, wall kicks, line clearing, scoring, and level progression), and (2) a robust gesture recognition system that maps hand poses captured from a webcam to game actions with low latency and high reliability.
+
+\subsection{Tetris Game Mechanics}
+
+The game operates on a $20 \times 10$ grid. Five tetromino shapes are supported: I, O, T, L, and S. Each shape is defined as a set of rotations, where each rotation is a list of $(r, c)$ offsets relative to an anchor cell. The game engine must handle:
+
+\begin{itemize}
+    \item \textbf{Piece spawning:} A new piece appears at the top-center of the grid. If it immediately collides with locked cells, the game ends.
+    \item \textbf{Gravity:} The active piece descends by one row at regular intervals. The drop interval decreases with level:
+    \begin{equation}
+        t_{\text{drop}} = \max\!\left(0.05,\; 0.5 - (L - 1) \times 0.04\right)
+        \label{eq:dropspeed}
+    \end{equation}
+    where $L$ is the current level. At level 1 the interval is 0.5\,s; by level 12 it saturates at 0.05\,s.
+    \item \textbf{Collision detection:} For each candidate position $(r', c')$ of every block in the piece, the system checks whether the cell is within bounds and unoccupied:
+    \begin{equation}
+        \text{collides}(r, c, \theta) = \bigvee_{(dr, dc) \in S_\theta} \left[ (r{+}dr, c{+}dc) \notin \mathcal{G} \;\lor\; g_{r+dr,\, c+dc} \neq 0 \right]
+        \label{eq:collision}
+    \end{equation}
+    where $S_\theta$ is the set of offsets for rotation $\theta$, $\mathcal{G}$ is the valid grid region, and $g_{i,j}$ is the grid cell value.
+    \item \textbf{Wall kicks:} When a rotation would cause collision, the engine attempts horizontal shifts of $\{0, -1, +1\}$ columns before rejecting the rotation.
+    \item \textbf{Line clearing and scoring:} Completed rows are removed and rows above shift down. Scoring follows the scheme: 1 line = 100, 2 = 300, 3 = 500, 4 = 800 points, multiplied by the current level. Level advances every 10 cleared lines.
+\end{itemize}
+
+\subsection{Gesture Recognition Requirements}
+
+The gesture system must map four distinct hand poses to four game actions with the following constraints:
+
+\begin{itemize}
+    \item \textbf{Low latency:} Gesture-to-action delay must be imperceptible ($< 100$\,ms).
+    \item \textbf{No false triggers:} Transitional hand poses (e.g., partially closing a fist) must not fire unintended actions.
+    \item \textbf{Discrete action mapping:} Each gesture must produce exactly one action per intentional trigger, not continuous repeated actions.
+    \item \textbf{Robustness:} The system must tolerate varying lighting, hand distances (30--60\,cm from webcam), and minor hand tremor.
+\end{itemize}
+
+\section{Related Work}
+
+Gesture-based game control has been explored extensively in the literature. Early systems relied on color-based hand segmentation and contour analysis, which were sensitive to lighting and skin tone. The introduction of depth sensors (e.g., Microsoft Kinect) enabled skeleton-based tracking but required specialized hardware. More recently, deep learning models such as MediaPipe Hands have enabled accurate 2D/3D hand landmark estimation from standard RGB webcams in real time, making gesture control accessible without dedicated hardware. This project builds on the MediaPipe Hand Landmarker model, applying it specifically to discrete game control with custom gesture classification logic.
+
+\section{Initial Attempts}
+
+\subsection{Finger Counting}
+
+The first approach counted the number of extended fingers to determine the action: 1 finger = move left, 2 = move right, 3 = rotate, 0 (fist) = hard drop. While simple to implement using the finger-up detection heuristic (comparing fingertip $y$-coordinates against PIP joint $y$-coordinates), this approach suffered from ambiguity. Transitional poses between finger counts frequently triggered the wrong action, and distinguishing between ``1 finger'' and ``2 fingers'' proved unreliable when the hand was at an angle.
+
+\subsection{Directional Swipe Detection}
+
+A second approach tracked the wrist landmark's horizontal displacement across consecutive frames, triggering left/right movement when the displacement exceeded a threshold. This provided intuitive directional control but was difficult to calibrate: a low threshold caused false triggers from hand tremor, while a high threshold required exaggerated movements that fatigued the user. Additionally, swipe detection introduced inherent latency because the system needed to observe motion over multiple frames before classifying the direction.
+
+\subsection{Lessons Learned}
+
+Both approaches revealed that continuous or ambiguous gestures are poorly suited to discrete game actions. The final design uses \emph{pinch gestures}---a binary, high-contrast pose transition (fingers apart $\rightarrow$ fingers touching)---which provides a clear trigger event with minimal ambiguity.
+
+\section{Final Approach}
+
+The final system uses MediaPipe's Hand Landmarker to detect 21 hand landmarks per frame and classifies four gestures: pinch thumb-to-index (move left), pinch thumb-to-middle (move right), thumb-up only (rotate), and closed fist (hard drop). Two key mechanisms---cooldown timers and pinch hysteresis---ensure reliable one-shot triggering.
+
+\subsection{Hand Landmark Detection}
+
+MediaPipe's Hand Landmarker is a pre-trained deep learning pipeline that returns 21 normalized 3D landmarks per detected hand. Each landmark $\ell_i = (x_i, y_i, z_i)$ has coordinates in $[0, 1]$ relative to the image dimensions, with $z$ representing depth relative to the wrist. The model operates in \texttt{VIDEO} mode, which leverages temporal consistency across frames for smoother tracking compared to independent per-frame detection.
+
+The model is configured with:
+\begin{itemize}
+    \item \texttt{num\_hands = 1} (single-hand tracking suffices for game control)
+    \item \texttt{min\_hand\_detection\_confidence = 0.6}
+    \item \texttt{min\_hand\_presence\_confidence = 0.6}
+    \item \texttt{min\_tracking\_confidence = 0.5}
+\end{itemize}
+
+Frames are captured from the webcam via OpenCV, horizontally flipped (mirrored) so that the user's left-hand movement corresponds to leftward on-screen movement, converted from BGR to RGB, and wrapped as a \texttt{mediapipe.Image} object before being passed to the landmarker.
+
+\subsection{Finger-Up Detection}
+
+A prerequisite for gesture classification is determining which fingers are extended. For fingers other than the thumb, a finger is considered ``up'' (extended) if its tip landmark has a smaller $y$-coordinate than its PIP (proximal interphalangeal) joint:
+
+\begin{equation}
+    f_i = \begin{cases} 1 & \text{if } y_{\text{tip}_i} < y_{\text{pip}_i} \\ 0 & \text{otherwise} \end{cases}, \quad i \in \{\text{index, middle, ring, pinky}\}
+    \label{eq:fingerup}
+\end{equation}
+
+For the thumb, which moves laterally rather than vertically, extension is determined by comparing tip and IP joint $x$-coordinates:
+
+\begin{equation}
+    f_{\text{thumb}} = \begin{cases} 1 & \text{if } x_{\text{tip}} < x_{\text{ip}} \\ 0 & \text{otherwise} \end{cases}
+    \label{eq:thumbup}
+\end{equation}
+
+This heuristic assumes a right hand facing a mirrored camera, which is the standard webcam configuration.
+
+\subsection{Gesture Classification}
+
+The gesture classifier operates on a priority hierarchy:
+
+\begin{enumerate}
+    \item \textbf{Closed fist} ($\sum f_i = 0$): All five fingers are curled. This triggers a hard drop, instantly moving the piece to the lowest valid position and locking it.
+    \item \textbf{Thumb only} ($f_{\text{thumb}} = 1 \land \sum_{i \neq \text{thumb}} f_i = 0$): Only the thumb is extended. This triggers a rotation.
+    \item \textbf{Pinch detection} (all other poses): The Euclidean distance between thumb tip ($\ell_4$) and index tip ($\ell_8$) or middle tip ($\ell_{12}$) is computed in normalized coordinates:
+    \begin{equation}
+        d_{\text{index}} = \sqrt{(x_4 - x_8)^2 + (y_4 - y_8)^2}
+        \label{eq:pinch_index}
+    \end{equation}
+    \begin{equation}
+        d_{\text{middle}} = \sqrt{(x_4 - x_{12})^2 + (y_4 - y_{12})^2}
+        \label{eq:pinch_middle}
+    \end{equation}
+    If $d_{\text{index}} < \tau$ (threshold $\tau = 0.07$), the gesture is classified as ``move left.'' If $d_{\text{middle}} < \tau$, it is ``move right.''
+\end{enumerate}
+
+\subsection{Cooldown Mechanism}
+
+Each action has an independent cooldown timer that prevents re-triggering within a specified interval:
+
+\begin{equation}
+    \text{allowed}(a) = \begin{cases} \text{true} & \text{if } t_{\text{now}} - t_{\text{last}}(a) \geq \delta_a \\ \text{false} & \text{otherwise} \end{cases}
+    \label{eq:cooldown}
+\end{equation}
+
+where $\delta_a$ is the cooldown duration for action $a$. The cooldown values are:
+
+\begin{table}[H]
+\centering
+\caption{Cooldown durations per action}
+\label{tab:cooldowns}
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Action} & \textbf{Cooldown (s)} \\
+\hline
+Move Left & 0.25 \\
+Move Right & 0.25 \\
+Rotate & 0.60 \\
+Hard Drop & 1.00 \\
+\hline
+\end{tabular}
+\end{table}
+
+Hard drop has the longest cooldown because it is the most consequential action (irreversible piece placement), while lateral movement has the shortest to allow rapid repositioning.
+
+\subsection{Pinch Hysteresis}
+
+A critical design element is the hysteresis mechanism for pinch gestures. Without it, the system would rapidly toggle between ``pinched'' and ``not pinched'' when the finger distance hovers near the threshold $\tau$. The solution introduces a boolean state variable \texttt{pinch\_fired} and a reset threshold $\tau_r = 1.2\tau$:
+
+\begin{equation}
+    \text{pinch\_fired} \leftarrow \begin{cases}
+        \text{true} & \text{if } d < \tau \text{ and pinch\_fired is false} \\
+        \text{false} & \text{if } d_{\text{index}} > \tau_r \text{ and } d_{\text{middle}} > \tau_r
+    \end{cases}
+    \label{eq:hysteresis}
+\end{equation}
+
+This creates three zones:
+\begin{itemize}
+    \item \textbf{Trigger zone} ($d < 0.07$): fires the action and sets \texttt{pinch\_fired = true}.
+    \item \textbf{Dead zone} ($0.07 \leq d \leq 0.084$): no state change, preventing oscillation.
+    \item \textbf{Reset zone} ($d > 0.084$): resets \texttt{pinch\_fired = false}, allowing the next pinch.
+\end{itemize}
+
+The user must fully open their hand (passing through the dead zone into the reset zone) before another pinch can register, ensuring exactly one action per intentional pinch gesture.
+
+\subsection{Rendering Pipeline}
+
+The game is rendered entirely using OpenCV drawing primitives on a NumPy array of size $600 \times 480$ pixels (game area $300 \times 600$ plus a $180$-pixel sidebar). Each frame:
+
+\begin{enumerate}
+    \item Locked cells are drawn as filled rectangles colored by piece type.
+    \item A ghost piece (drop preview) is rendered at the lowest valid position with $\frac{1}{3}$ brightness.
+    \item The active piece is drawn at its current position.
+    \item Grid lines, sidebar (score, level, next piece preview), and status indicators are overlaid.
+    \item If the help menu is active, a translucent overlay ($\alpha = 0.85$) is composited using \texttt{cv2.addWeighted}.
+\end{enumerate}
+
+The webcam feed, when gesture mode is active, is displayed in a separate window with the detected hand skeleton (21 landmarks connected by 21 bone segments) and the current gesture label overlaid.
+
+\subsection{Main Loop Integration}
+
+The main loop runs at approximately 33\,Hz (constrained by \texttt{cv2.waitKey(30)}). Each iteration: (1) processes one webcam frame for gesture input if gesture mode is enabled, (2) applies gravity if the drop timer has elapsed, (3) renders the game frame, and (4) polls for keyboard input. Keyboard controls (arrow keys, WASD, space) remain active even when gesture mode is on, providing a fallback input method.
+
+\section{Results and Observation}
+
+\subsection{Gesture Recognition Performance}
+
+The system was tested under standard indoor lighting conditions with a laptop webcam. Table~\ref{tab:gesture_results} summarizes the observed gesture recognition reliability.
+
+\begin{table}[H]
+\centering
+\caption{Gesture recognition reliability (qualitative assessment)}
+\label{tab:gesture_results}
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Gesture} & \textbf{Action} & \textbf{Reliability} \\
+\hline
+Pinch thumb + index & Move Left & High \\
+Pinch thumb + middle & Move Right & Moderate--High \\
+Thumb up only & Rotate & High \\
+Closed fist & Hard Drop & High \\
+\hline
+\end{tabular}
+\end{table}
+
+The thumb-to-middle pinch showed slightly lower reliability than thumb-to-index because the middle finger's range of motion is more constrained, sometimes causing the index finger to also approach the thumb and creating ambiguity.
+
+\subsection{Latency}
+
+Gesture-to-action latency was measured qualitatively as imperceptible ($< 100$\,ms), meeting the design requirement. The primary contributors to latency are MediaPipe inference time ($\sim$15--25\,ms per frame on a modern laptop CPU) and the \texttt{waitKey} polling interval (30\,ms).
+
+\subsection{Cooldown and Hysteresis Effectiveness}
+
+Without cooldowns, a single pinch gesture held for 0.5\,s would trigger approximately 15 repeated move actions (at 30\,fps). With the 0.25\,s cooldown, at most 2 actions fire during a sustained pinch. Combined with hysteresis (which requires a full open-close cycle), exactly 1 action fires per intentional pinch in practice.
+
+\subsection{Comparison: Keyboard vs. Gesture Control}
+
+Keyboard input provides faster and more precise control, particularly for rapid lateral movement and last-second rotations. Gesture control is slower due to cooldown enforcement and the physical time required to transition between hand poses. However, gesture control offers a more engaging and physically interactive experience and is viable for casual gameplay at lower levels where the drop speed is forgiving.
+
+\section{Future Work}
+
+\begin{itemize}
+    \item \textbf{Two-hand support:} Using the non-dominant hand for movement and the dominant hand for rotation/drop would reduce gesture conflicts and enable simultaneous actions.
+    \item \textbf{Adaptive thresholds:} Calibrating the pinch threshold $\tau$ based on the user's hand size (estimated from wrist-to-middle-finger-tip distance) would improve reliability across different users.
+    \item \textbf{Swipe-based movement:} Combining pinch for single-step movement with wrist-velocity-based swipe for multi-cell movement would better match keyboard control speed.
+    \item \textbf{GPU acceleration:} Running MediaPipe inference on GPU would reduce latency and free CPU cycles for higher frame rates.
+    \item \textbf{Additional pieces:} Adding the J and Z tetrominoes (currently absent) would complete the standard Tetris piece set.
+    \item \textbf{Visual feedback:} Highlighting the detected gesture on the game window (not just the webcam window) would improve the user experience when the webcam feed is not visible.
+\end{itemize}
+
+\section*{Conclusion}
+
+This project demonstrates that real-time hand gesture recognition using MediaPipe's Hand Landmarker can be effectively applied to control a Tetris game rendered with OpenCV. The key design insight is that discrete, high-contrast gestures (pinches and fist) are better suited to game control than continuous gestures (swipes, finger counting), and that cooldown timers combined with hysteresis-based state management are essential for reliable one-shot action triggering. While gesture control does not match keyboard input in speed or precision, it provides a functional and engaging alternative that showcases practical applications of computer vision in interactive systems.
+
+\end{document}

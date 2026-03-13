@@ -20,3 +20,10 @@ task1/rrt_demo/cache/
 
 # Video outputs (too large for git)
 *.mp4
+
+# Claude Code
+.claude/
+
+# Bonus task documentation (personal only)
+bonus_task/documentation.md
+
